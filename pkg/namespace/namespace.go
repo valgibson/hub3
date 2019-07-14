@@ -25,15 +25,20 @@ type NameSpace struct {
 	// BaseAlt are alternative base-URI for the same prefix.
 	// Sometimes historically the base-URIs for a namespace changes and we still
 	// have to correctly resolve both.
-	BaseAlt []string `json:"baseAlt"`
+	BaseAlt []string `json:"baseAlt,omitempty"`
 
 	// PrefixAlt are altenative prefixes for the default base URI.
 	// Different content-providers and organisations have at time selected alternative
 	// prefixes for the same base URI. We need to support both entry entry-points.
-	PrefixAlt []string `json:"prefixAlt"`
+	PrefixAlt []string `json:"prefixAlt,omitempty"`
 
 	// Schema is an URL to the RDFS or OWL definition of namespace
-	Schema string `json:"schema"`
+	Schema string `json:"schema,omitempty"`
+
+	// Temporary defines if the NameSpace has been given a temporary prefix because
+	// only the base-URI was known when the NameSpace was created.
+	// Namespaces with prefix collissions will also be given a temporary prefix
+	Temporary bool `json:"temporary,omitempty"`
 }
 
 // String returns a string representation of URI
@@ -64,6 +69,11 @@ func SplitURI(uri string) (base string, name string) {
 //
 // When the prefix is already present in PrefixAlt no error is thrown.
 func (ns *NameSpace) AddPrefix(prefix string) error {
+	if ns.Temporary {
+		ns.Temporary = false
+		ns.Prefix = prefix
+		return nil
+	}
 	for _, p := range ns.PrefixAlt {
 		if p == prefix {
 			return nil

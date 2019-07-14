@@ -1,6 +1,7 @@
 package namespace
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -11,10 +12,6 @@ type Store interface {
 	//
 	// When the object already exists it is overwritten.
 	Set(ns *NameSpace) error
-
-	// Add either the Base and Prefix alternatives depending on which one
-	// is found first. When neither is found a new NameSpace is created.
-	Add(prefix, base string) (*NameSpace, error)
 
 	// Delete removes the NameSpace from the store.
 	//
@@ -31,6 +28,9 @@ type Store interface {
 	// GetWithBase returns the NameSpace for a given base-URI.
 	// When the base-URI is not found, an ErrNameSpaceNotFound error is returned.
 	GetWithBase(base string) (ns *NameSpace, err error)
+
+	// List returns a list of all the NameSpaces
+	List() ([]*NameSpace, error)
 }
 
 // memoryStore is the default namespace.Store for namespace.Service.
@@ -60,6 +60,9 @@ func (ms *memoryStore) Len() int {
 
 // Set stores the NameSpace in the Store
 func (ms *memoryStore) Set(ns *NameSpace) error {
+	if ns == nil {
+		return fmt.Errorf("cannot store empty namespace")
+	}
 	err := ms.Delete(ns)
 	ms.Lock()
 	defer ms.Unlock()
@@ -76,50 +79,6 @@ func (ms *memoryStore) Set(ns *NameSpace) error {
 	id := ns.GetID()
 	ms.namespaces[id] = ns
 	return nil
-}
-
-// Add adds the prefix and base to a NameSpace.
-// If nor prefix, base are previously stored a new NameSpace is created.
-func (ms *memoryStore) Add(prefix, base string) (*NameSpace, error) {
-	ns, err := ms.GetWithPrefix(prefix)
-	if err != nil {
-		if err != ErrNameSpaceNotFound {
-			return nil, err
-		}
-	}
-	if ns != nil {
-		err = ns.AddBase(base)
-		if err != nil {
-			return nil, err
-		}
-		return ns, nil
-	}
-
-	ns, err = ms.GetWithBase(base)
-	if err != nil {
-		if err != ErrNameSpaceNotFound {
-			return nil, err
-		}
-	}
-	if ns != nil {
-		err = ns.AddPrefix(prefix)
-		if err != nil {
-			return nil, err
-		}
-		return ns, nil
-
-	}
-
-	ns = &NameSpace{
-		Prefix: prefix,
-		Base:   base,
-	}
-	err = ms.Set(ns)
-	if err != nil {
-		return nil, err
-	}
-
-	return ns, nil
 }
 
 // Delete removes a NameSpace from the store
@@ -171,4 +130,18 @@ func (ms *memoryStore) GetWithBase(base string) (*NameSpace, error) {
 		return nil, ErrNameSpaceNotFound
 	}
 	return ns, nil
+}
+
+// List returns a list of all the stored NameSpace objects.
+// An error is only returned when the underlying datastructure is unavailable.
+func (ms *memoryStore) List() ([]*NameSpace, error) {
+	namespaces := []*NameSpace{}
+	for _, ns := range ms.namespaces {
+		if ns != nil {
+			//log.Printf("ns %#v => %#v", k, ns)
+			namespaces = append(namespaces, ns)
+		}
+	}
+	//log.Printf("ns list %#v", ms.namespaces)
+	return namespaces, nil
 }

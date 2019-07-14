@@ -4,6 +4,7 @@ package namespace
 const (
 	ErrNameSpaceNotFound       = Error("namespace not found")
 	ErrNameSpaceDuplicateEntry = Error("prefix and base stored in different entries")
+	ErrNameSpaceNotValid       = Error("prefix or base not valid")
 )
 
 // Error represents a Namespace error.

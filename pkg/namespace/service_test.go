@@ -1,6 +1,7 @@
 package namespace_test
 
 import (
+	"log"
 	"testing"
 
 	"github.com/delving/hub3/pkg/namespace"
@@ -46,7 +47,7 @@ func TestService_SearchLabel(t *testing.T) {
 				return
 			}
 			// add alternative
-			err = s.Add("dce", dc.Base)
+			_, err = s.Add("dce", dc.Base)
 			if err != nil {
 				t.Errorf("Service.SearchLabel() unexpected error = %v", err)
 				return
@@ -87,7 +88,7 @@ func TestNewService(t *testing.T) {
 					namespace.WithDefaults(),
 				},
 			},
-			2014,
+			2015,
 			false,
 		},
 	}
@@ -101,6 +102,98 @@ func TestNewService(t *testing.T) {
 			if got.Len() != tt.loadedNS {
 				t.Errorf("NewService() = %v, want %v", got.Len(), tt.loadedNS)
 			}
+		})
+	}
+}
+
+func TestService_Add(t *testing.T) {
+	svc, err := namespace.NewService()
+	if err != nil {
+		t.Errorf("Unable to start namespace Service; %#v", err)
+	}
+	type args struct {
+		prefix string
+		base   string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		stored    int
+		prefixes  int
+		temporary bool
+		wantErr   bool
+	}{
+		{
+			"empty base",
+			args{prefix: "dc", base: ""},
+			0,
+			0,
+			false,
+			true,
+		},
+		{
+			"empty prefix",
+			args{prefix: "", base: "http://purl.org/dc/elements/1.1/"},
+			1,
+			1,
+			true,
+			false,
+		},
+		{
+			"setting default over temporary",
+			args{prefix: "dc", base: "http://purl.org/dc/elements/1.1/"},
+			1,
+			1,
+			false,
+			false,
+		},
+		{
+			"adding the same pair again",
+			args{prefix: "dc", base: "http://purl.org/dc/elements/1.1/"},
+			1,
+			1,
+			false,
+			false,
+		},
+		{
+			"adding the alternative prefix",
+			args{prefix: "dce", base: "http://purl.org/dc/elements/1.1/"},
+			1,
+			2,
+			false,
+			false,
+		},
+		{
+			"adding new namespace pair",
+			args{prefix: "skos", base: "http://www.w3.org/2004/02/skos/core#"},
+			2,
+			1,
+			false,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ns, err := svc.Add(tt.args.prefix, tt.args.base)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Service.Add() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if ns == nil {
+				t.Errorf("Service.Add() namespace should not be nil; %#v", ns)
+			}
+			if svc.Len() != tt.stored {
+				t.Errorf("Service.Add() stored %d, want %d", svc.Len(), tt.stored)
+			}
+			if ns.Temporary != tt.temporary {
+				t.Errorf("Service.Add() temporary %v, want %v", ns.Temporary, tt.temporary)
+			}
+			if len(ns.Prefixes()) != tt.prefixes {
+				t.Errorf("Service.Add() number of prefixes %v, want %v", len(ns.Prefixes()), tt.prefixes)
+			}
+			log.Printf("%#v", ns)
 		})
 	}
 }

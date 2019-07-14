@@ -33,7 +33,7 @@ type Service struct {
 //
 // Example:
 //
-//   service, err := elastic.NewService(
+//   service, err := namespace.NewService(
 //     namespace.WithDefaults(),
 //	 )
 //
@@ -53,7 +53,7 @@ func NewService(options ...ServiceOptionFunc) (*Service, error) {
 	if s.loadDefaults {
 		for _, nsMap := range []map[string]string{defaultNS, customNS} {
 			for prefix, base := range nsMap {
-				if err := s.Add(prefix, base); err != nil {
+				if _, err := s.Add(prefix, base); err != nil {
 					return nil, err
 				}
 			}
@@ -88,30 +88,102 @@ func (s *Service) checkStore() {
 	}
 }
 
+// Add adds the prefix and base-URI to the namespace service.
+// When either the prefix or the base-URI is already present in the service the
+// unknown is stored as an alternative. If neither is present a new NameSpace
+// is created.
+func (s *Service) Add(prefix, base string) (*NameSpace, error) {
+	s.checkStore()
+
+	if base == "" {
+		return nil, ErrNameSpaceNotValid
+	}
+
+	if prefix == "" {
+		ns := &NameSpace{
+			Base:      base,
+			Temporary: true,
+		}
+		ns.Prefix = ns.GetID()
+
+		err := s.store.Set(ns)
+		if err != nil {
+			return nil, err
+		}
+		return ns, nil
+	}
+
+	ns, err := s.store.GetWithPrefix(prefix)
+	if err != nil {
+		if err != ErrNameSpaceNotFound {
+			return nil, err
+		}
+	}
+	if ns != nil {
+		if base != ns.Base {
+			// base is not linked to the NameSpace
+			// so creating a new temporary NameSpace
+			ns = &NameSpace{
+				Base:      base,
+				PrefixAlt: []string{prefix},
+				Temporary: true,
+			}
+			ns.Prefix = ns.GetID()
+
+			err = s.store.Set(ns)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return ns, nil
+	}
+
+	ns, err = s.store.GetWithBase(base)
+	if err != nil {
+		if err != ErrNameSpaceNotFound {
+			return nil, err
+		}
+	}
+	if ns != nil {
+		err = ns.AddPrefix(prefix)
+		if err != nil {
+			return nil, err
+		}
+		err = s.store.Set(ns)
+		if err != nil {
+			return nil, err
+		}
+		return ns, nil
+
+	}
+
+	ns = &NameSpace{
+		Prefix: prefix,
+		Base:   base,
+	}
+	err = s.store.Set(ns)
+	if err != nil {
+		return nil, err
+	}
+
+	return ns, nil
+}
+
+// Delete removes a namespace from the store
+func (s *Service) Delete(ns *NameSpace) error {
+	return s.store.Delete(ns)
+}
+
 // Len returns the number of namespaces in the Service
 func (s *Service) Len() int {
 	s.checkStore()
 	return s.store.Len()
 }
 
-// Set sets the default prefix and base-URI for a namespace.
-// When the namespace is already present it will be overwritten.
-// When the NameSpace contains an unknown prefix and base-URI pair but one of them
-// is found in the NameSpace service, the current default is stored in PrefixAlt
-// or BaseAlt and the new default set.
-func (s *Service) Set(ns *NameSpace) error {
-	s.checkStore()
-	return s.store.Set(ns)
-}
-
-// Add adds the prefix and base-URI to the namespace service.
-// When either the prefix or the base-URI is already present in the service the
-// unknown is stored as an alternative. If neither is present a new NameSpace
-// is created.
-func (s *Service) Add(prefix, base string) error {
-	s.checkStore()
-	_, err := s.store.Add(prefix, base)
-	return err
+// List returns a list of all stored NameSpace objects.
+// An error is returned when the underlying storage can't be accessed.
+func (s *Service) List() ([]*NameSpace, error) {
+	return s.store.List()
 }
 
 // SearchLabel returns the URI in a short namespaced form.
@@ -129,6 +201,16 @@ func (s *Service) SearchLabel(uri string) (string, error) {
 		return "", errors.Wrapf(err, "unable to retrieve namespace for %s", base)
 	}
 	return fmt.Sprintf("%s_%s", ns.Prefix, label), nil
+}
+
+// Set sets the default prefix and base-URI for a namespace.
+// When the namespace is already present it will be overwritten.
+// When the NameSpace contains an unknown prefix and base-URI pair but one of them
+// is found in the NameSpace service, the current default is stored in PrefixAlt
+// or BaseAlt and the new default set.
+func (s *Service) Set(ns *NameSpace) error {
+	s.checkStore()
+	return s.store.Set(ns)
 }
 
 //type Service interface {
