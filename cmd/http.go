@@ -42,6 +42,7 @@ var httpCmd = &cobra.Command{
 			handlers.RegisterLinkedDataFragments,
 			handlers.RegisterSparql,
 			handlers.RegisterSearch,
+			handlers.RegisterNamespace,
 		}
 		server, err := http.NewServer(
 			http.SetBuildInfo(buildInfo),
